@@ -1,0 +1,175 @@
+#[derive(Clone, PartialEq, Eq)]
+pub enum ListInner<T: Clone> {
+    Nil,
+    Cons(T, List<T>),
+}
+pub use self::ListInner::{Cons, Nil};
+#[derive(Clone, PartialEq, Eq)]
+pub struct List<T: Clone> {
+    inner: std::rc::Rc<ListInner<T>>,
+    len: usize,
+}
+impl<T: Clone> List<T> {
+    pub fn nil() -> List<T> {
+        List {
+            inner: std::rc::Rc::new(Nil),
+            len: 0,
+        }
+    }
+    pub fn is_nil(&self) -> bool {
+        match self.as_ref() {
+            &Nil => true,
+            &Cons(_, _) => false,
+        }
+    }
+    pub fn len(&self) -> usize {
+        self.len
+    }
+    pub fn head(&self) -> T {
+        match self.as_ref() {
+            &Nil => panic!("cannot find head of nil"),
+            &Cons(ref head, _) => head.clone(),
+        }
+    }
+    pub fn tail(&self) -> List<T> {
+        match self.as_ref() {
+            &Nil => panic!("cannot find head of nil"),
+            &Cons(_, ref tail) => tail.clone(),
+        }
+    }
+    pub fn iter(&self) -> ListIter<T> {
+        ListIter { iter: self.clone() }
+    }
+    pub fn rev(&self) -> List<T> {
+        fn go<T: Clone>(list: &List<T>, acc: List<T>) -> List<T> {
+            match list.as_ref() {
+                &Nil => acc,
+                &Cons(ref head, ref tail) => go(tail, head.clone().cons(acc)),
+            }
+        }
+        go(self, List::nil())
+    }
+    pub fn append(&self, other: &List<T>) -> List<T> {
+        fn go<T: Clone>(list1: &List<T>, list2: &List<T>, list1_rev: List<T>) -> List<T> {
+            match list1.as_ref() {
+                &Nil => list1_rev.rev_append(list2),
+                &Cons(ref head, ref tail) => go(tail, list2, head.clone().cons(list1_rev)),
+            }
+        }
+        go(self, other, List::nil())
+    }
+    pub fn rev_append(&self, other: &List<T>) -> List<T> {
+        match self.as_ref() {
+            &Nil => other.clone(),
+            &Cons(ref head, ref tail) => tail.rev_append(&head.clone().cons(other)),
+        }
+    }
+    #[cfg(test)]
+    fn take(self) -> std::rc::Rc<ListInner<T>> {
+        self.inner
+    }
+}
+impl<T: Clone> AsRef<ListInner<T>> for List<T> {
+    fn as_ref(&self) -> &ListInner<T> {
+        self.inner.as_ref()
+    }
+}
+impl<T: Clone + std::fmt::Debug> std::fmt::Debug for List<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self.inner.as_ref() {
+            &Nil => write!(f, "nil"),
+            &Cons(ref head, ref tail) => write!(f, "{:?} :: {:?}", head, tail),
+        }
+    }
+}
+impl<T: Clone + PartialOrd> PartialOrd for List<T> {
+    fn partial_cmp(&self, other: &List<T>) -> Option<std::cmp::Ordering> {
+        use std::cmp::Ordering::*;
+        match (self.as_ref(), other.as_ref()) {
+            (&Nil, &Nil) => Some(Equal),
+            (&Nil, &Cons(_, _)) => Some(Less),
+            (&Cons(_, _), &Nil) => Some(Greater),
+            (&Cons(ref head1, ref tail1), &Cons(ref head2, ref tail2)) => head1
+                .partial_cmp(&head2)
+                .and_then(|ordering| match ordering {
+                    Equal => tail1.partial_cmp(tail2),
+                    _ => Some(ordering),
+                }),
+        }
+    }
+}
+impl<T: Clone + Ord> Ord for List<T> {
+    fn cmp(&self, other: &List<T>) -> std::cmp::Ordering {
+        use std::cmp::Ordering::*;
+        match (self.as_ref(), other.as_ref()) {
+            (&Nil, &Nil) => Equal,
+            (&Nil, &Cons(_, _)) => Less,
+            (&Cons(_, _), &Nil) => Greater,
+            (&Cons(ref head1, ref tail1), &Cons(ref head2, ref tail2)) => match head1.cmp(&head2) {
+                Equal => tail1.cmp(tail2),
+                determined => determined,
+            },
+        }
+    }
+}
+pub struct ListIter<T: Clone> {
+    iter: List<T>,
+}
+impl<T: Clone> Iterator for ListIter<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        let cons;
+        match self.iter.as_ref() {
+            &Nil => return None,
+            &Cons(ref head, ref tail) => cons = (head.clone(), tail.clone()),
+        }
+        self.iter = cons.1;
+        Some(cons.0)
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.iter.len(), Some(self.iter.len()))
+    }
+    fn count(self) -> usize {
+        self.iter.len()
+    }
+}
+impl<T: Clone> ExactSizeIterator for ListIter<T> {}
+impl<T: Clone> IntoIterator for List<T> {
+    type Item = T;
+    type IntoIter = ListIter<T>;
+    fn into_iter(self) -> ListIter<T> {
+        ListIter { iter: self }
+    }
+}
+impl<'a, T: Clone> IntoIterator for &'a List<T> {
+    type Item = T;
+    type IntoIter = ListIter<T>;
+    fn into_iter(self) -> ListIter<T> {
+        self.iter()
+    }
+}
+impl<T: Clone> std::iter::FromIterator<T> for List<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> List<T> {
+        let xs: Vec<T> = iter.into_iter().collect();
+        let mut list = List::nil();
+        for x in xs.into_iter().rev() {
+            list = x.cons(list);
+        }
+        list
+    }
+}
+pub trait IntoCons<T: Clone, L: std::borrow::Borrow<List<T>>> {
+    fn cons(self, tail: L) -> List<T>;
+}
+impl<T: Clone, L: std::borrow::Borrow<List<T>>> IntoCons<T, L> for T {
+    fn cons(self, tail: L) -> List<T> {
+        let tail_cloned: List<T> = tail.borrow().clone().into();
+        let tail_len = tail_cloned.len;
+        List {
+            inner: std::rc::Rc::new(Cons(self, tail_cloned)),
+            len: tail_len + 1,
+        }
+    }
+}
+#[macro_export]
+macro_rules ! list { [ ] => { List :: nil ( ) } ; [ $ head : expr ] => { $ head . cons ( List :: nil ( ) ) } ; [ $ head : expr , $ ( $ tail : expr ) ,* ] => { $ head . cons ( list ! [ $ ( $ tail ) ,* ] ) } ; [ $ head : expr , $ ( $ tail : expr ) ,+ , ] => { list ! [ $ head , $ ( $ tail ) ,* ] } ; }

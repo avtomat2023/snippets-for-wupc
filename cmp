@@ -1,0 +1,39 @@
+use std::cmp::{Ord, Ordering};
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Reverse<T>(T);
+impl<T: PartialOrd> PartialOrd for Reverse<T> {
+    fn partial_cmp(&self, other: &Reverse<T>) -> Option<Ordering> {
+        other.0.partial_cmp(&self.0)
+    }
+}
+impl<T: Ord> Ord for Reverse<T> {
+    fn cmp(&self, other: &Reverse<T>) -> Ordering {
+        other.0.cmp(&self.0)
+    }
+}
+trait SortDesc<T> {
+    fn sort_desc(&mut self)
+    where
+        T: Ord;
+    fn sort_desc_by_key<K: Ord, F: FnMut(&T) -> K>(&mut self, f: F);
+}
+impl<T> SortDesc<T> for [T] {
+    fn sort_desc(&mut self)
+    where
+        T: Ord,
+    {
+        self.sort();
+        self.reverse();
+    }
+    fn sort_desc_by_key<K: Ord, F: FnMut(&T) -> K>(&mut self, mut f: F) {
+        self.sort_by_key(|x| Reverse(f(x)));
+    }
+}
+#[derive(PartialEq, PartialOrd)]
+struct Total<T: PartialOrd + PartialEq>(T);
+impl<T: PartialOrd + PartialEq> Eq for Total<T> {}
+impl<T: PartialOrd + PartialEq> Ord for Total<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}

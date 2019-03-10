@@ -1,0 +1,248 @@
+#[derive(Clone)]
+pub struct StepBy<I> {
+    iter: I,
+    step: usize,
+    first_take: bool,
+}
+impl<I: Iterator> Iterator for StepBy<I> {
+    type Item = I::Item;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.first_take {
+            self.first_take = false;
+            self.iter.next()
+        } else {
+            self.iter.nth(self.step)
+        }
+    }
+}
+#[derive(Clone)]
+pub struct LScan<I: Iterator, S: Clone, F: FnMut(&S, I::Item) -> S> {
+    iter: I,
+    state: Option<S>,
+    f: F,
+}
+impl<I: Iterator, S: Clone, F> Iterator for LScan<I, S, F>
+where
+    F: FnMut(&S, I::Item) -> S,
+{
+    type Item = S;
+    fn next(&mut self) -> Option<S> {
+        if self.state.is_none() {
+            return None;
+        }
+        let state_inner = self.state.take().unwrap();
+        if let Some(item) = self.iter.next() {
+            self.state = Some((self.f)(&state_inner, item));
+        }
+        Some(state_inner)
+    }
+}
+pub struct Flatten<I: Iterator>
+where
+    I::Item: IntoIterator,
+{
+    outer_iter: I,
+    inner_iter: Option<<<I as Iterator>::Item as IntoIterator>::IntoIter>,
+}
+impl<I, J> Iterator for Flatten<I>
+where
+    I: Iterator<Item = J>,
+    J: IntoIterator,
+{
+    type Item = <<J as IntoIterator>::IntoIter as Iterator>::Item;
+    fn next(&mut self) -> Option<J::Item> {
+        loop {
+            if let Some(inner_iter) = self.inner_iter.as_mut() {
+                if let item @ Some(_) = inner_iter.next() {
+                    return item;
+                }
+            }
+            match self.outer_iter.next() {
+                None => return None,
+                Some(inner) => self.inner_iter = Some(inner.into_iter()),
+            }
+        }
+    }
+}
+pub struct GroupBy<K: Eq, I: Iterator, F: FnMut(&I::Item) -> K> {
+    cur: Option<(I::Item, K)>,
+    iter: I,
+    key_fn: F,
+}
+impl<K: Eq, I: Iterator, F: FnMut(&I::Item) -> K> Iterator for GroupBy<K, I, F> {
+    type Item = Vec<I::Item>;
+    fn next(&mut self) -> Option<Vec<I::Item>> {
+        let cur = self.cur.take();
+        cur.map(|(item, key)| {
+            let mut group = vec![item];
+            loop {
+                let next = self.iter.next();
+                match next {
+                    Some(next_item) => {
+                        let next_key = (self.key_fn)(&next_item);
+                        if key == next_key {
+                            group.push(next_item);
+                        } else {
+                            self.cur = Some((next_item, next_key));
+                            break;
+                        }
+                    }
+                    None => {
+                        self.cur = None;
+                        break;
+                    }
+                }
+            }
+            group
+        })
+    }
+}
+use std::fmt;
+pub trait RichIterator: Iterator {
+    fn step_by_(self, step: usize) -> StepBy<Self>
+    where
+        Self: Sized,
+    {
+        assert_ne!(step, 0);
+        StepBy {
+            iter: self,
+            step: step - 1,
+            first_take: true,
+        }
+    }
+    fn for_each<F: FnMut(Self::Item)>(self, mut f: F)
+    where
+        Self: Sized,
+    {
+        for item in self {
+            f(item);
+        }
+    }
+    fn lscan<S: Clone, F>(self, state: S, f: F) -> LScan<Self, S, F>
+    where
+        Self: Sized,
+        F: FnMut(&S, Self::Item) -> S,
+    {
+        LScan {
+            iter: self,
+            state: Some(state),
+            f: f,
+        }
+    }
+    fn get_unique(mut self) -> Option<Self::Item>
+    where
+        Self: Sized,
+        Self::Item: Eq,
+    {
+        let first_opt = self.next();
+        first_opt.and_then(|first| {
+            if self.all(|item| item == first) {
+                Some(first)
+            } else {
+                None
+            }
+        })
+    }
+    fn flatten(mut self) -> Flatten<Self>
+    where
+        Self: Sized,
+        Self::Item: IntoIterator,
+    {
+        let inner_opt = self.next();
+        Flatten {
+            outer_iter: self,
+            inner_iter: inner_opt.map(|inner| inner.into_iter()),
+        }
+    }
+    fn group_by<K: Eq, F: FnMut(&Self::Item) -> K>(mut self, mut f: F) -> GroupBy<K, Self, F>
+    where
+        Self: Sized,
+    {
+        let next = self.next();
+        GroupBy {
+            cur: next.map(|item| {
+                let key = f(&item);
+                (item, key)
+            }),
+            iter: self,
+            key_fn: f,
+        }
+    }
+    fn join(mut self, sep: &str) -> String
+    where
+        Self: Sized,
+        Self::Item: fmt::Display,
+    {
+        let mut result = String::new();
+        if let Some(first) = self.next() {
+            result.push_str(&format!("{}", first));
+        }
+        for s in self {
+            result.push_str(&format!("{}{}", sep, s));
+        }
+        result
+    }
+    fn cat(self) -> String
+    where
+        Self: Sized,
+        Self::Item: fmt::Display,
+    {
+        self.join("")
+    }
+}
+impl<I: Iterator> RichIterator for I {}
+pub struct Unfold<T, F>
+where
+    F: FnMut(&T) -> Option<T>,
+{
+    state: Option<T>,
+    f: F,
+}
+impl<T, F> Iterator for Unfold<T, F>
+where
+    F: FnMut(&T) -> Option<T>,
+{
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        if self.state.is_none() {
+            return None;
+        }
+        let state_inner = self.state.take().unwrap();
+        self.state = (self.f)(&state_inner);
+        Some(state_inner)
+    }
+}
+pub fn unfold<T, F>(init: T, f: F) -> Unfold<T, F>
+where
+    F: FnMut(&T) -> Option<T>,
+{
+    Unfold {
+        state: Some(init),
+        f: f,
+    }
+}
+pub struct Iterate<T, F>
+where
+    F: FnMut(&T) -> T,
+{
+    state: T,
+    f: F,
+}
+impl<T, F> Iterator for Iterate<T, F>
+where
+    F: FnMut(&T) -> T,
+{
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        use std::mem::swap;
+        let mut state = (self.f)(&self.state);
+        swap(&mut state, &mut self.state);
+        Some(state)
+    }
+}
+pub fn iterate<T, F>(init: T, f: F) -> Iterate<T, F>
+where
+    F: FnMut(&T) -> T,
+{
+    Iterate { state: init, f: f }
+}

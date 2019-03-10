@@ -1,0 +1,16 @@
+#[macro_export]
+macro_rules! dbg {
+    ( $ e : expr ) => {{
+        use std::io::{self, Write};
+        let result = $e;
+        writeln!(
+            io::stderr(),
+            "{}: {} = {:?}",
+            line!(),
+            stringify!($e),
+            result
+        )
+        .unwrap();
+        result
+    }};
+}

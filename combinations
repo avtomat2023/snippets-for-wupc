@@ -1,0 +1,149 @@
+pub struct Combinations<I: Iterator + Clone>
+where
+    I::Item: Clone,
+{
+    with_replacement: bool,
+    iters: Vec<I>,
+    next_item: Option<Vec<I::Item>>,
+}
+impl<I: Iterator + Clone> Combinations<I>
+where
+    I::Item: Clone,
+{
+    pub fn new(mut iter: I, size: usize, with_replacement: bool) -> Combinations<I> {
+        let mut result = Combinations {
+            with_replacement: with_replacement,
+            iters: Vec::new(),
+            next_item: None,
+        };
+        let mut next_item = Vec::new();
+        if with_replacement {
+            if let Some(x) = iter.next() {
+                for _ in 0..size {
+                    result.iters.push(iter.clone());
+                    next_item.push(x.clone());
+                }
+            }
+            result.next_item = Some(next_item);
+        } else {
+            for _ in 0..size {
+                match iter.next() {
+                    Some(x) => {
+                        result.iters.push(iter.clone());
+                        next_item.push(x);
+                    }
+                    None => {
+                        result.iters.clear();
+                        break;
+                    }
+                }
+            }
+            if result.iters.len() == size {
+                result.next_item = Some(next_item);
+            }
+        }
+        result
+    }
+    fn size(&self) -> usize {
+        self.iters.len()
+    }
+    fn do_next_with_replacement(iters: &mut [I], next_item: &mut [I::Item]) -> bool {
+        match iters.split_last_mut() {
+            None => false,
+            Some((iter, mut iters_rest)) => {
+                match iter.next() {
+                    Some(x) => {
+                        *next_item.last_mut().unwrap() = x;
+                    }
+                    None => {
+                        let (mut item_last, mut item_rest) = next_item.split_last_mut().unwrap();
+                        if !Self::do_next_with_replacement(&mut iters_rest, &mut item_rest) {
+                            return false;
+                        }
+                        let new_iter = iters_rest.last().unwrap().clone();
+                        *iter = new_iter;
+                        *item_last = item_rest.last().unwrap().clone();
+                    }
+                }
+                true
+            }
+        }
+    }
+    fn do_next_without_replacement(
+        iters: &mut [I],
+        next_item: &mut [I::Item],
+        left_index: usize,
+    ) -> bool {
+        let end = iters.len();
+        let mut success = true;
+        for i in left_index..end {
+            match iters[i].next() {
+                None => {
+                    success = false;
+                    break;
+                }
+                Some(x) => {
+                    next_item[i] = x;
+                    if i + 1 < end {
+                        iters[i + 1] = iters[i].clone();
+                    }
+                }
+            }
+        }
+        if success {
+            true
+        } else if left_index == 0 {
+            false
+        } else {
+            Self::do_next_without_replacement(iters, next_item, left_index - 1)
+        }
+    }
+}
+impl<I: Iterator + Clone> Iterator for Combinations<I>
+where
+    I::Item: Clone,
+{
+    type Item = Vec<I::Item>;
+    fn next(&mut self) -> Option<Vec<I::Item>> {
+        use std::mem::swap;
+        let mut continuing = true;
+        let mut next_item = self.next_item.clone().map(|mut item| {
+            continuing = if self.with_replacement {
+                Self::do_next_with_replacement(&mut self.iters, &mut item)
+            } else {
+                let end = self.size();
+                Self::do_next_without_replacement(&mut self.iters, &mut item, end - 1)
+            };
+            item
+        });
+        swap(&mut next_item, &mut self.next_item);
+        if !continuing {
+            self.next_item = None;
+        }
+        next_item
+    }
+}
+#[allow(unused_macros)]
+macro_rules! combinations {
+    ( $ iter : expr , 2 ) => {
+        Combinations::new($iter, 2, false).map(|v| (v[0], v[1]))
+    };
+    ( $ iter : expr , 3 ) => {
+        Combinations::new($iter, 3, false).map(|v| (v[0], v[1], v[2]))
+    };
+    ( $ iter : expr , 4 ) => {
+        Combinations::new($iter, 4, false).map(|v| (v[0], v[1], v[2], v[3]))
+    };
+}
+#[allow(unused_macros)]
+macro_rules! combinations_repl {
+    ( $ iter : expr , 2 ) => {
+        Combinations::new($iter, 2, true).map(|v| (v[0], v[1]))
+    };
+    ( $ iter : expr , 3 ) => {
+        Combinations::new($iter, 3, true).map(|v| (v[0], v[1], v[2]))
+    };
+    ( $ iter : expr , 4 ) => {
+        Combinations::new($iter, 4, true).map(|v| (v[0], v[1], v[2], v[3]))
+    };
+}

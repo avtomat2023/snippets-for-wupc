@@ -1,0 +1,15 @@
+pub fn yn(result: bool) {
+    if result {
+        println!("Yes");
+    } else {
+        println!("No");
+    }
+}
+#[allow(non_snake_case)]
+pub fn YN(result: bool) {
+    if result {
+        println!("YES");
+    } else {
+        println!("NO");
+    }
+}

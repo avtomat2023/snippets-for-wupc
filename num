@@ -1,0 +1,26 @@
+pub type BigDigit = u64;
+trait PrimitiveInt {
+    fn abs_diff(self, rhs: Self) -> Self;
+    fn mod_euc(self, rhs: Self) -> Self;
+}
+macro_rules ! impl_primitive_int { ( $ ( $ t : ty ) * ) => { $ ( impl PrimitiveInt for $ t { fn abs_diff ( self , rhs : $ t ) -> $ t { if self < rhs { rhs - self } else { self - rhs } } # [ allow ( unused_comparisons ) ] fn mod_euc ( self , rhs : $ t ) -> $ t { let r = self % rhs ; if r < 0 { if rhs < 0 { r - rhs } else { r + rhs } } else { r } } } ) * } }
+impl_primitive_int ! ( u8 u16 u32 u64 usize i8 i16 i32 i64 isize ) ;
+pub trait PrimitiveUInt {
+    fn ceil_div(self, rhs: Self) -> Self;
+    fn round_div(self, rhs: Self) -> Self;
+    fn to_le_big_digits(self) -> Vec<BigDigit>;
+}
+macro_rules ! impl_primitive_uint { ( $ ( $ t : ty ) * ) => { $ ( impl PrimitiveUInt for $ t { fn ceil_div ( self , rhs : $ t ) -> $ t { ( self + rhs - 1 ) / rhs } fn round_div ( self , rhs : $ t ) -> $ t { ( self + ( rhs + 1 ) / 2 ) / rhs } fn to_le_big_digits ( self ) -> Vec < BigDigit > { vec ! [ self as BigDigit ] } } ) * } }
+impl_primitive_uint ! ( u8 u16 u32 u64 usize ) ;
+trait RichInt {
+    fn abs_diff(self, rhs: Self) -> Self;
+    fn mod_euc(self, rhs: Self) -> Self;
+}
+macro_rules ! impl_rich_int { ( $ ( $ t : ty ) * ) => { $ ( impl RichInt for $ t { fn abs_diff ( self , rhs : $ t ) -> $ t { if self < rhs { rhs - self } else { self - rhs } } # [ allow ( unused_comparisons ) ] fn mod_euc ( self , rhs : $ t ) -> $ t { let r = self % rhs ; if r < 0 { if rhs < 0 { r - rhs } else { r + rhs } } else { r } } } ) * } }
+impl_rich_int ! ( u8 u16 u32 u64 usize i8 i16 i32 i64 isize ) ;
+pub trait RichUInt {
+    fn ceil_div(self, rhs: Self) -> Self;
+    fn round_div(self, rhs: Self) -> Self;
+}
+macro_rules ! impl_rich_uint { ( $ ( $ t : ty ) * ) => { $ ( impl RichUInt for $ t { fn ceil_div ( self , rhs : $ t ) -> $ t { ( self + rhs - 1 ) / rhs } fn round_div ( self , rhs : $ t ) -> $ t { ( self + rhs / 2 - 1 ) / rhs } } ) * } }
+impl_rich_uint ! ( u8 u16 u32 u64 ) ;

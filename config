@@ -1,0 +1,1 @@
+pub const PRIME_MODULUS: u64 = 1_000_000_007;

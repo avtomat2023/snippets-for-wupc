@@ -1,0 +1,112 @@
+#[derive(Clone)]
+pub struct Product2<I, J>
+where
+    I: Iterator,
+    I::Item: Clone,
+    J: Iterator + Clone,
+{
+    iters: (I, J),
+    orig_iter: J,
+    cur: Option<I::Item>,
+}
+impl<I, J> Product2<I, J>
+where
+    I: Iterator,
+    I::Item: Clone,
+    J: Iterator + Clone,
+{
+    pub fn new(iter1: I, iter2: J) -> Product2<I, J> {
+        Product2 {
+            iters: (iter1, iter2.clone()),
+            orig_iter: iter2,
+            cur: None,
+        }
+    }
+}
+impl<I, J> Iterator for Product2<I, J>
+where
+    I: Iterator,
+    I::Item: Clone,
+    J: Iterator + Clone,
+{
+    type Item = (I::Item, J::Item);
+    fn next(&mut self) -> Option<(I::Item, J::Item)> {
+        match self.cur.clone() {
+            None => match self.iters.0.next() {
+                None => None,
+                Some(a) => match self.iters.1.next() {
+                    None => None,
+                    Some(b) => {
+                        let a_cloned = a.clone();
+                        self.cur = Some(a);
+                        Some((a_cloned, b))
+                    }
+                },
+            },
+            Some(a) => match self.iters.1.next() {
+                Some(b) => Some((a.clone(), b)),
+                None => match self.iters.0.next() {
+                    None => None,
+                    Some(a) => {
+                        self.iters.1 = self.orig_iter.clone();
+                        match self.iters.1.next() {
+                            None => None,
+                            Some(b) => {
+                                let a_cloned = a.clone();
+                                self.cur = Some(a);
+                                Some((a_cloned, b))
+                            }
+                        }
+                    }
+                },
+            },
+        }
+    }
+}
+#[derive(Clone)]
+pub struct Product3<I, J, K>
+where
+    I: Iterator,
+    I::Item: Clone,
+    J: Iterator + Clone,
+    J::Item: Clone,
+    K: Iterator + Clone,
+{
+    inner: Product2<Product2<I, J>, K>,
+}
+impl<I, J, K> Product3<I, J, K>
+where
+    I: Iterator,
+    I::Item: Clone,
+    J: Iterator + Clone,
+    J::Item: Clone,
+    K: Iterator + Clone,
+{
+    pub fn new(iter1: I, iter2: J, iter3: K) -> Product3<I, J, K> {
+        Product3 {
+            inner: Product2::new(Product2::new(iter1, iter2), iter3),
+        }
+    }
+}
+impl<I, J, K> Iterator for Product3<I, J, K>
+where
+    I: Iterator,
+    I::Item: Clone,
+    J: Iterator + Clone,
+    J::Item: Clone,
+    K: Iterator + Clone,
+{
+    type Item = (I::Item, J::Item, K::Item);
+    fn next(&mut self) -> Option<(I::Item, J::Item, K::Item)> {
+        self.inner.next().map(|((a, b), c)| (a, b, c))
+    }
+}
+#[allow(unused_macros)]
+macro_rules! product {
+    ( $ i : expr , $ j : expr ) => {
+        Product2::new($i, $j)
+    };
+    ( $ i : expr , $ j : expr , $ k : expr ) => {
+        Product3::new($i, $j, $k)
+    };
+}
